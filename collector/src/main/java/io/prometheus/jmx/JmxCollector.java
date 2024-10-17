@@ -46,6 +46,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
+import org.apache.commons.lang3.StringUtils;
 import org.yaml.snakeyaml.Yaml;
 
 @SuppressWarnings("unchecked")
@@ -73,7 +74,7 @@ public class JmxCollector implements MultiCollector {
         ArrayList<String> labelValues;
     }
 
-    private static class Config {
+    public static class Config {
         Integer startDelaySeconds = 0;
         String jmxUrl = "";
         String username = "";
@@ -87,6 +88,15 @@ public class JmxCollector implements MultiCollector {
         List<Rule> rules = new ArrayList<>();
         long lastUpdate = 0L;
 
+        String kafkaBootServer = "";
+        boolean kafkaEnableAcl = false;
+        String kafkaSecurityProtocol = "SASL_PLAINTEXT";
+        int kafkaRequestTimeoutMs = 3000;
+        String kafkaSaslMechanism = "SCRAM-SHA-256";
+        String kafkaSaslJaasConfig =
+                "org.apache.kafka.common.security.scram.ScramLoginModule required"
+                        + " username=\"admin\" password=\"admin\"";
+
         MatchedRulesCache rulesCache;
     }
 
@@ -94,6 +104,7 @@ public class JmxCollector implements MultiCollector {
     private Config config;
     private File configFile;
     private long createTimeNanoSecs = System.nanoTime();
+    private KafkaCollector kafkaCollector;
 
     private Counter configReloadSuccess;
     private Counter configReloadFailure;
@@ -131,6 +142,11 @@ public class JmxCollector implements MultiCollector {
 
     public JmxCollector register(PrometheusRegistry prometheusRegistry) {
         this.prometheusRegistry = prometheusRegistry;
+        kafkaCollector = new KafkaCollector(getLatestConfig(), prometheusRegistry);
+        // kafka指标
+        if (StringUtils.isNotBlank(config.kafkaBootServer)) {
+            kafkaCollector.register();
+        }
 
         configReloadSuccess =
                 Counter.builder()
@@ -365,6 +381,31 @@ public class JmxCollector implements MultiCollector {
 
         cfg.rulesCache = new MatchedRulesCache(cfg.rules);
         cfg.objectNameAttributeFilter = ObjectNameAttributeFilter.create(yamlConfig);
+
+        // 增加kafka采集信息
+        if (yamlConfig.containsKey("kafkaBootServer")) {
+            cfg.kafkaBootServer = (String) yamlConfig.get("kafkaBootServer");
+        }
+
+        if (yamlConfig.containsKey("kafkaEnableAcl")) {
+            cfg.kafkaEnableAcl = (Boolean) yamlConfig.get("kafkaEnableAcl");
+        }
+
+        if (yamlConfig.containsKey("kafkaSecurityProtocol")) {
+            cfg.kafkaSecurityProtocol = (String) yamlConfig.get("kafkaSecurityProtocol");
+        }
+
+        if (yamlConfig.containsKey("kafkaSaslMechanism")) {
+            cfg.kafkaSaslMechanism = (String) yamlConfig.get("kafkaSaslMechanism");
+        }
+
+        if (yamlConfig.containsKey("kafkaSaslJaasConfig")) {
+            cfg.kafkaSaslJaasConfig = (String) yamlConfig.get("kafkaSaslJaasConfig");
+        }
+
+        if (yamlConfig.containsKey("kafkaRequestTimeoutMs")) {
+            cfg.kafkaRequestTimeoutMs = (int) yamlConfig.get("kafkaRequestTimeoutMs");
+        }
 
         return cfg;
     }
@@ -715,6 +756,11 @@ public class JmxCollector implements MultiCollector {
                 new MatchedRulesCache.StalenessTracker();
 
         Receiver receiver = new Receiver(config, stalenessTracker);
+
+        // kafka指标
+        if (StringUtils.isNotBlank(config.kafkaBootServer)) {
+            kafkaCollector.collect();
+        }
 
         JmxScraper scraper =
                 new JmxScraper(
