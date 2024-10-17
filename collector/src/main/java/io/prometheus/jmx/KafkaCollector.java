@@ -60,7 +60,6 @@ public class KafkaCollector {
         kafka_brokers =
                 Gauge.builder()
                         .name("kafka_brokers")
-                        .labelNames("test")
                         .help("Number of Brokers in the Kafka Cluster")
                         .register(prometheusRegistry);
 
