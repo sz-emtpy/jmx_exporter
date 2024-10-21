@@ -262,7 +262,7 @@ public class KafkaCollector {
 
         Map<TopicPartition, Long> endOffsetMap = getEndOffset(null);
 
-        for (Map.Entry<TopicPartition, Long> entry : beginOffsetMap.entrySet()) {
+        for (Map.Entry<TopicPartition, Long> entry : endOffsetMap.entrySet()) {
             kafka_topic_partition_current_offset
                     .labelValues(entry.getKey().topic(), String.valueOf(entry.getKey().partition()))
                     .set(entry.getValue());
