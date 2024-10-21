@@ -59,6 +59,7 @@ public class KafkaCollector {
     private Gauge kafka_consumergroup_current_offset;
     private Gauge kafka_consumergroup_lag;
     private Gauge kafka_consumergroupzookeeper_lag_zookeeper;
+    private Gauge kafka_consumergroup_members;
 
     public void register() {
         kafka_broker_info =
@@ -142,6 +143,13 @@ public class KafkaCollector {
                         .name("kafka_consumergroup_lag")
                         .labelNames("topic", "partition", "consumergroup")
                         .help("Current Approximate Lag of a ConsumerGroup at Topic/Partition")
+                        .register(prometheusRegistry);
+
+        kafka_consumergroup_members =
+                Gauge.builder()
+                        .name("kafka_consumergroup_members")
+                        .labelNames("consumergroup")
+                        .help("Amount of members in a consumer group")
                         .register(prometheusRegistry);
 
         kafka_consumergroupzookeeper_lag_zookeeper =
@@ -269,6 +277,46 @@ public class KafkaCollector {
         }
 
         for (String groupId : getGroupList()) {
+            try {
+                // 获取消费者组的描述信息
+                Map<String, ConsumerGroupDescription> consumerGroupDescriptionMap =
+                        kafkaClientHolder
+                                .getAdminClient()
+                                .describeConsumerGroups(Collections.singletonList(groupId))
+                                .all()
+                                .get();
+
+                // 遍历消费者组的描述信息
+                for (Map.Entry<String, ConsumerGroupDescription> entry :
+                        consumerGroupDescriptionMap.entrySet()) {
+                    String groupID = entry.getKey();
+                    ConsumerGroupDescription description = entry.getValue();
+
+                    //                    System.out.println("Consumer Group ID: " + groupID);
+                    //                    System.out.println("Is Simple Consumer Group: " +
+                    // description.isSimpleConsumerGroup());
+
+                    // 获取消费者组中的成员
+                    Collection<MemberDescription> members = description.members();
+                    //                    for (MemberDescription member : members) {
+                    //                        System.out.println("Consumer Member ID: " +
+                    // member.consumerId());
+                    //                        System.out.println("Client ID: " + member.clientId());
+                    //                        System.out.println("Host: " + member.host());
+                    //                        // 获取该成员订阅的分区
+                    //                        for (TopicPartition partition :
+                    // member.assignment().topicPartitions()) {
+                    //                            System.out.println("Assigned Partition: " +
+                    // partition.topic() + "-" + partition.partition());
+                    //                        }
+                    //                    }
+                    kafka_consumergroup_members.labelValues(groupID).set(members.size());
+                }
+
+            } catch (ExecutionException | InterruptedException e) {
+
+            }
+
             Map<TopicPartition, Long> committedOffsetMap = getCommittedOffset(groupId);
             committedOffsetMap.forEach(
                     (topicPartition, committedOffset) -> {
