@@ -9,12 +9,10 @@ import io.prometheus.jmx.logger.Logger;
 import io.prometheus.jmx.logger.LoggerFactory;
 import io.prometheus.metrics.core.metrics.Gauge;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
-
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -158,11 +156,18 @@ public class KafkaCollector {
     public KafkaCollector collect() {
         try {
             // 查询集群信息
-            DescribeClusterResult clusterInfo = kafkaClientHolder.getAdminClient().describeCluster();
+            DescribeClusterResult clusterInfo =
+                    kafkaClientHolder.getAdminClient().describeCluster();
             kafka_brokers.set(clusterInfo.nodes().get().size());
             // 获取 broker 节点信息
             for (Node broker : clusterInfo.nodes().get()) {
-                kafka_broker_info.labelValues(clusterInfo.clusterId().get(), String.valueOf(broker.id()), broker.host(), String.valueOf(broker.port())).set(1);
+                kafka_broker_info
+                        .labelValues(
+                                clusterInfo.clusterId().get(),
+                                String.valueOf(broker.id()),
+                                broker.host(),
+                                String.valueOf(broker.port()))
+                        .set(1);
             }
         } catch (ExecutionException | InterruptedException e) {
 
@@ -176,30 +181,70 @@ public class KafkaCollector {
                             .names()
                             .get();
             for (String topic : strings) {
-                Map<String, TopicDescription> topicDescriptions = kafkaClientHolder.getAdminClient().describeTopics(java.util.Collections.singletonList(topic)).all().get();
+                Map<String, TopicDescription> topicDescriptions =
+                        kafkaClientHolder
+                                .getAdminClient()
+                                .describeTopics(java.util.Collections.singletonList(topic))
+                                .all()
+                                .get();
                 // 遍历并打印 topic 分区信息
                 for (Map.Entry<String, TopicDescription> entry : topicDescriptions.entrySet()) {
-//                    System.out.println("Topic: " + entry.getKey());
-                    kafka_topic_partitions.labelValues(entry.getKey()).set(entry.getValue().partitions().size());
+                    //                    System.out.println("Topic: " + entry.getKey());
+                    kafka_topic_partitions
+                            .labelValues(entry.getKey())
+                            .set(entry.getValue().partitions().size());
                     for (TopicPartitionInfo partitionInfo : entry.getValue().partitions()) {
-//                        System.out.println("Partition: " + partitionInfo.partition());
-//                        System.out.println("Leader: " + partitionInfo.leader());
-//                        System.out.println("Replicas: " + partitionInfo.replicas());
-//                        System.out.println("ISR: " + partitionInfo.isr());
-                        kafka_topic_partition_leader.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(partitionInfo.leader().id());
-                        kafka_topic_partition_replicas.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(partitionInfo.replicas().size());
-                        kafka_topic_partition_in_sync_replica.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(partitionInfo.isr().size());
+                        //                        System.out.println("Partition: " +
+                        // partitionInfo.partition());
+                        //                        System.out.println("Leader: " +
+                        // partitionInfo.leader());
+                        //                        System.out.println("Replicas: " +
+                        // partitionInfo.replicas());
+                        //                        System.out.println("ISR: " + partitionInfo.isr());
+                        kafka_topic_partition_leader
+                                .labelValues(
+                                        entry.getKey(), String.valueOf(partitionInfo.partition()))
+                                .set(partitionInfo.leader().id());
+                        kafka_topic_partition_replicas
+                                .labelValues(
+                                        entry.getKey(), String.valueOf(partitionInfo.partition()))
+                                .set(partitionInfo.replicas().size());
+                        kafka_topic_partition_in_sync_replica
+                                .labelValues(
+                                        entry.getKey(), String.valueOf(partitionInfo.partition()))
+                                .set(partitionInfo.isr().size());
 
-                        if (partitionInfo.replicas() != null && partitionInfo.replicas().size() > 0 && partitionInfo.leader().id() == partitionInfo.replicas().get(0).id()){
-                            kafka_topic_partition_leader_is_preferred.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(1);
+                        if (partitionInfo.replicas() != null
+                                && partitionInfo.replicas().size() > 0
+                                && partitionInfo.leader().id()
+                                        == partitionInfo.replicas().get(0).id()) {
+                            kafka_topic_partition_leader_is_preferred
+                                    .labelValues(
+                                            entry.getKey(),
+                                            String.valueOf(partitionInfo.partition()))
+                                    .set(1);
                         } else {
-                            kafka_topic_partition_leader_is_preferred.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(0);
+                            kafka_topic_partition_leader_is_preferred
+                                    .labelValues(
+                                            entry.getKey(),
+                                            String.valueOf(partitionInfo.partition()))
+                                    .set(0);
                         }
 
-                        if (partitionInfo.replicas() != null &&  partitionInfo.isr() != null &&  partitionInfo.isr().size() < partitionInfo.replicas().size() ){
-                            kafka_topic_partition_under_replicated_partition.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(1);
+                        if (partitionInfo.replicas() != null
+                                && partitionInfo.isr() != null
+                                && partitionInfo.isr().size() < partitionInfo.replicas().size()) {
+                            kafka_topic_partition_under_replicated_partition
+                                    .labelValues(
+                                            entry.getKey(),
+                                            String.valueOf(partitionInfo.partition()))
+                                    .set(1);
                         } else {
-                            kafka_topic_partition_under_replicated_partition.labelValues(entry.getKey(), String.valueOf(partitionInfo.partition())).set(0);
+                            kafka_topic_partition_under_replicated_partition
+                                    .labelValues(
+                                            entry.getKey(),
+                                            String.valueOf(partitionInfo.partition()))
+                                    .set(0);
                         }
                     }
                 }
@@ -210,13 +255,17 @@ public class KafkaCollector {
 
         Map<TopicPartition, Long> beginOffsetMap = getBeginOffset(null);
         for (Map.Entry<TopicPartition, Long> entry : beginOffsetMap.entrySet()) {
-            kafka_topic_partition_oldest_offset.labelValues(entry.getKey().topic(), String.valueOf(entry.getKey().partition())).set(entry.getValue());
+            kafka_topic_partition_oldest_offset
+                    .labelValues(entry.getKey().topic(), String.valueOf(entry.getKey().partition()))
+                    .set(entry.getValue());
         }
 
         Map<TopicPartition, Long> endOffsetMap = getEndOffset(null);
 
         for (Map.Entry<TopicPartition, Long> entry : beginOffsetMap.entrySet()) {
-            kafka_topic_partition_current_offset.labelValues(entry.getKey().topic(), String.valueOf(entry.getKey().partition())).set(entry.getValue());
+            kafka_topic_partition_current_offset
+                    .labelValues(entry.getKey().topic(), String.valueOf(entry.getKey().partition()))
+                    .set(entry.getValue());
         }
 
         for (String groupId : getGroupList()) {
@@ -247,7 +296,6 @@ public class KafkaCollector {
         return null;
     }
 
-
     public List<String> getGroupList() {
         ListConsumerGroupsResult result = kafkaClientHolder.getAdminClient().listConsumerGroups();
         try {
@@ -277,7 +325,7 @@ public class KafkaCollector {
                     ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                     StringDeserializer.class.getName());
 
-            try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);) {
+            try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props); ) {
                 Map<TopicPartition, Long> endOffsetMap =
                         consumer.endOffsets(consumeOffsetMap.keySet());
 
@@ -377,8 +425,8 @@ public class KafkaCollector {
         props.put(ConsumerConfig.CLIENT_ID_CONFIG, AbstractKafkaService.INNER_CONSUMER);
 
         try (KafkaConsumer consumer =
-                     new KafkaConsumer(
-                             props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
+                new KafkaConsumer(
+                        props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
             return consumer.endOffsets(topicPartitions);
         }
     }
@@ -394,10 +442,9 @@ public class KafkaCollector {
         props.put(ConsumerConfig.CLIENT_ID_CONFIG, AbstractKafkaService.INNER_CONSUMER);
 
         try (KafkaConsumer consumer =
-                     new KafkaConsumer(
-                             props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
+                new KafkaConsumer(
+                        props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
             return consumer.beginningOffsets(topicPartitions);
         }
     }
-
 }
